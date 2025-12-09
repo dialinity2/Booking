@@ -4,7 +4,7 @@ import { deleteHapioBooking } from "../services/hapio/deleteBooking.js";
 import { createZoomMeeting } from "../services/zoom/createMeeting.js";
 import { deleteZoomMeeting } from "../services/zoom/deleteMeeting.js";
 import { getAvailableSlots } from "../services/hapio/getAvailableSlots.js";
-import { sendBookingConfirmation } from "../services/email/sendEmail.js";
+import { sendBookingConfirmation, sendAdminNotification } from "../services/email/sendEmail.js";
 import { validateDateInput } from "../utils/validateDate.js";
 import { validateBookingInput } from "../utils/sanitizer.js";
 import { logger } from "../utils/logger.js";
@@ -31,7 +31,7 @@ router.post("/", async (req, res) => {
             });
         }
 
-        const { name, email, date, timezone } = inputValidation.sanitized;
+        const { name, email, phone, date, timezone } = inputValidation.sanitized;
 
         // Validate date
         const dateValidation = validateDateInput(date);
@@ -88,7 +88,7 @@ router.post("/", async (req, res) => {
             });
         }
 
-        // STEP 3: Send confirmation email (non-blocking)
+        // STEP 3: Send confirmation emails (non-blocking)
         const bookingData = {
             id: hapioBooking.id,
             starts_at: hapioBooking.starts_at,
@@ -101,21 +101,41 @@ router.post("/", async (req, res) => {
             }
         };
 
-        // Send email asynchronously (don't wait for it)
+        // Send customer confirmation email
         sendBookingConfirmation(email, name, bookingData, timezone || 'UTC')
             .then((emailResult) => {
-                logger.info("Confirmation email sent", {
+                logger.info("Customer confirmation email sent", {
                     to: email,
                     messageId: emailResult.messageId,
                     previewUrl: emailResult.previewUrl
                 });
             })
             .catch((emailError) => {
-                logger.error("Failed to send confirmation email", {
+                logger.error("Failed to send customer confirmation email", {
                     error: emailError.message,
                     customerEmail: email
                 });
-                // Don't fail the booking if email fails
+            });
+
+        // Send admin notification email
+        sendAdminNotification(email, name, phone, bookingData, timezone || 'UTC')
+            .then((adminEmailResult) => {
+                if (adminEmailResult.success) {
+                    logger.info("Admin notification email sent", {
+                        to: process.env.ADMIN_EMAIL,
+                        messageId: adminEmailResult.messageId,
+                        previewUrl: adminEmailResult.previewUrl
+                    });
+                } else {
+                    logger.warn("Admin notification skipped", {
+                        reason: adminEmailResult.reason
+                    });
+                }
+            })
+            .catch((adminEmailError) => {
+                logger.error("Failed to send admin notification email", {
+                    error: adminEmailError.message
+                });
             });
 
         // SUCCESS - Both bookings created
@@ -141,7 +161,7 @@ router.post("/", async (req, res) => {
                     start_time: zoomMeeting.start_time
                 }
             },
-            message: "Booking created successfully. Confirmation email sent!"
+            message: "Booking created successfully. Confirmation emails sent!"
         });
 
     } catch (error) {

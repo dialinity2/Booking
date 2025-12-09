@@ -34,6 +34,23 @@ export function isValidEmail(email) {
 }
 
 /**
+ * Validate phone number format
+ * @param {string} phone - Phone to validate
+ * @returns {boolean} - True if valid phone format
+ */
+export function isValidPhone(phone) {
+    if (!phone || typeof phone !== 'string') {
+        return false;
+    }
+    
+    // Remove all non-numeric characters for validation
+    const cleaned = phone.replace(/\D/g, '');
+    
+    // Must have at least 10 digits (can have more for international)
+    return cleaned.length >= 10 && cleaned.length <= 15;
+}
+
+/**
  * Validate timezone string
  * @param {string} timezone - IANA timezone identifier
  * @returns {boolean} - True if valid timezone
@@ -75,6 +92,11 @@ export function validateBookingInput(data) {
         errors.push("Invalid email format");
     }
     
+    // Validate phone (optional but must be valid if provided)
+    if (data.phone && !isValidPhone(data.phone)) {
+        errors.push("Invalid phone number format");
+    }
+    
     // Validate date
     if (!data.date || typeof data.date !== 'string') {
         errors.push("Date is required");
@@ -97,6 +119,7 @@ export function validateBookingInput(data) {
         sanitized: {
             name: sanitizeString(data.name, 100),
             email: data.email.toLowerCase().trim(),
+            phone: data.phone ? sanitizeString(data.phone, 20) : null,
             date: data.date,
             timezone: data.timezone || 'UTC'
         }

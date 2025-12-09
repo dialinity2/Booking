@@ -35,11 +35,16 @@ function createTransporter() {
 /**
  * Generate ICS calendar file content
  */
-function generateICSContent(booking) {
+function generateICSContent(booking, attendees = []) {
     const start = DateTime.fromISO(booking.starts_at);
     const end = DateTime.fromISO(booking.ends_at);
     
     const icsDate = (dt) => dt.toFormat("yyyyMMdd'T'HHmmss'Z'");
+    
+    // Build attendees list
+    const attendeeLines = attendees.map(email => 
+        `ATTENDEE;CN=${email};ROLE=REQ-PARTICIPANT:mailto:${email}`
+    ).join('\r\n');
     
     return `BEGIN:VCALENDAR
 VERSION:2.0
@@ -56,6 +61,7 @@ DESCRIPTION:Join your consultation meeting: ${booking.meeting.join_url}
 LOCATION:Zoom Meeting
 STATUS:CONFIRMED
 SEQUENCE:0
+${attendeeLines}
 BEGIN:VALARM
 TRIGGER:-PT15M
 ACTION:DISPLAY
@@ -66,9 +72,9 @@ END:VCALENDAR`;
 }
 
 /**
- * Generate HTML email template
+ * Generate HTML email template for CUSTOMER
  */
-function generateEmailHTML(name, booking, userTimezone) {
+function generateCustomerEmailHTML(name, booking, userTimezone) {
     const start = DateTime.fromISO(booking.starts_at).setZone(userTimezone);
     const end = DateTime.fromISO(booking.ends_at).setZone(userTimezone);
     
@@ -205,14 +211,177 @@ function generateEmailHTML(name, booking, userTimezone) {
 }
 
 /**
- * Send booking confirmation email
+ * Generate HTML email template for ADMIN
+ */
+function generateAdminEmailHTML(customerName, customerEmail, customerPhone, booking, userTimezone) {
+    const start = DateTime.fromISO(booking.starts_at).setZone(userTimezone);
+    const end = DateTime.fromISO(booking.ends_at).setZone(userTimezone);
+    
+    const formattedDate = start.toLocaleString({
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+    });
+    
+    const formattedTime = `${start.toLocaleString(DateTime.TIME_SIMPLE)} - ${end.toLocaleString(DateTime.TIME_SIMPLE)}`;
+    
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Booking Notification</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td align="center" style="padding: 40px 0;">
+                <table role="presentation" style="width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 40px 40px 20px 40px; text-align: center; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border-radius: 8px 8px 0 0;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 28px;">🔔 New Booking Alert!</h1>
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px;">
+                            <p style="margin: 0 0 30px 0; font-size: 16px; color: #333333;">
+                                You have a new consultation booking. Here are the details:
+                            </p>
+                            
+                            <!-- Customer Details -->
+                            <div style="background-color: #f8f9fa; border-left: 4px solid #28a745; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+                                <h3 style="margin: 0 0 15px 0; color: #333; font-size: 16px;">👤 Customer Information</h3>
+                                <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                                    <tr>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #666666; width: 120px;">
+                                            <strong>Name:</strong>
+                                        </td>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #333333;">
+                                            ${customerName}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #666666;">
+                                            <strong>Email:</strong>
+                                        </td>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #333333;">
+                                            <a href="mailto:${customerEmail}" style="color: #28a745;">${customerEmail}</a>
+                                        </td>
+                                    </tr>
+                                    ${customerPhone ? `
+                                    <tr>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #666666;">
+                                            <strong>Phone:</strong>
+                                        </td>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #333333;">
+                                            <a href="tel:${customerPhone}" style="color: #28a745;">${customerPhone}</a>
+                                        </td>
+                                    </tr>
+                                    ` : ''}
+                                </table>
+                            </div>
+                            
+                            <!-- Meeting Details -->
+                            <div style="background-color: #e7f3ff; border-left: 4px solid #2196f3; padding: 20px; margin-bottom: 20px; border-radius: 4px;">
+                                <h3 style="margin: 0 0 15px 0; color: #333; font-size: 16px;">📅 Meeting Details</h3>
+                                <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                                    <tr>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #666666; width: 120px;">
+                                            <strong>Date:</strong>
+                                        </td>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #333333;">
+                                            ${formattedDate}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #666666;">
+                                            <strong>Time:</strong>
+                                        </td>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #333333;">
+                                            ${formattedTime}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #666666;">
+                                            <strong>Timezone:</strong>
+                                        </td>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #333333;">
+                                            ${userTimezone}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #666666;">
+                                            <strong>Booking ID:</strong>
+                                        </td>
+                                        <td style="padding: 8px 0; font-size: 14px; color: #333333;">
+                                            ${booking.id}
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                            
+                            <!-- Zoom Meeting Links -->
+                            <div style="text-align: center; margin: 30px 0;">
+                                <a href="${booking.meeting.start_url}" style="display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; margin: 5px;">
+                                    🎥 Start Meeting (Host)
+                                </a>
+                                <br>
+                                <a href="${booking.meeting.join_url}" style="display: inline-block; padding: 15px 30px; background: #6c757d; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; margin: 5px;">
+                                    Join as Participant
+                                </a>
+                            </div>
+                            
+                            ${booking.meeting.password ? `
+                            <div style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                                <p style="margin: 0; font-size: 14px; color: #856404;">
+                                    <strong>Meeting Password:</strong> ${booking.meeting.password}
+                                </p>
+                            </div>
+                            ` : ''}
+                            
+                            <!-- Quick Actions -->
+                            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 4px; margin-top: 30px;">
+                                <h3 style="margin: 0 0 15px 0; color: #333; font-size: 16px;">⚡ Quick Actions</h3>
+                                <p style="margin: 0; font-size: 14px; color: #666;">
+                                    • <strong>Add to Calendar:</strong> The .ics file is attached to this email<br>
+                                    • <strong>Contact Customer:</strong> <a href="mailto:${customerEmail}" style="color: #28a745;">${customerEmail}</a><br>
+                                    • <strong>Zoom Meeting ID:</strong> ${booking.meeting.id}
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 20px 40px; text-align: center; background-color: #f8f9fa; border-radius: 0 0 8px 8px;">
+                            <p style="margin: 0; font-size: 12px; color: #999999;">
+                                © ${new Date().getFullYear()} Booking System - Admin Notification
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+    `.trim();
+}
+
+/**
+ * Send booking confirmation email to CUSTOMER
  */
 export async function sendBookingConfirmation(customerEmail, customerName, booking, userTimezone = 'UTC') {
     try {
         const transporter = createTransporter();
         
-        const icsContent = generateICSContent(booking);
-        const htmlContent = generateEmailHTML(customerName, booking, userTimezone);
+        const icsContent = generateICSContent(booking, [customerEmail]);
+        const htmlContent = generateCustomerEmailHTML(customerName, booking, userTimezone);
         
         const mailOptions = {
             from: `"${process.env.EMAIL_FROM_NAME || 'Booking System'}" <${process.env.EMAIL_FROM || 'noreply@booking-system.com'}>`,
@@ -230,10 +399,10 @@ export async function sendBookingConfirmation(customerEmail, customerName, booki
         
         const info = await transporter.sendMail(mailOptions);
         
-        logger.info("Booking confirmation email sent", {
+        logger.info("Customer confirmation email sent", {
             to: customerEmail,
             messageId: info.messageId,
-            previewUrl: nodemailer.getTestMessageUrl(info) // Only for Ethereal
+            previewUrl: nodemailer.getTestMessageUrl(info)
         });
         
         return {
@@ -243,12 +412,68 @@ export async function sendBookingConfirmation(customerEmail, customerName, booki
         };
         
     } catch (error) {
-        logger.error("Failed to send booking confirmation email", {
+        logger.error("Failed to send customer confirmation email", {
             error: error.message,
             customerEmail
         });
         
         throw new Error(`Failed to send confirmation email: ${error.message}`);
+    }
+}
+
+/**
+ * Send booking notification email to ADMIN
+ */
+export async function sendAdminNotification(customerEmail, customerName, customerPhone, booking, userTimezone = 'UTC') {
+    try {
+        const adminEmail = process.env.ADMIN_EMAIL;
+        
+        if (!adminEmail) {
+            logger.warn("ADMIN_EMAIL not configured, skipping admin notification");
+            return { success: false, reason: "ADMIN_EMAIL not configured" };
+        }
+        
+        const transporter = createTransporter();
+        
+        // Include both admin and customer in calendar invite
+        const icsContent = generateICSContent(booking, [adminEmail, customerEmail]);
+        const htmlContent = generateAdminEmailHTML(customerName, customerEmail, customerPhone, booking, userTimezone);
+        
+        const mailOptions = {
+            from: `"${process.env.EMAIL_FROM_NAME || 'Booking System'}" <${process.env.EMAIL_FROM || 'noreply@booking-system.com'}>`,
+            to: adminEmail,
+            subject: `🔔 New Booking: ${customerName} - ${DateTime.fromISO(booking.starts_at).setZone(userTimezone).toLocaleString(DateTime.DATE_MED)}`,
+            html: htmlContent,
+            attachments: [
+                {
+                    filename: 'consultation.ics',
+                    content: icsContent,
+                    contentType: 'text/calendar; charset=utf-8; method=REQUEST'
+                }
+            ]
+        };
+        
+        const info = await transporter.sendMail(mailOptions);
+        
+        logger.info("Admin notification email sent", {
+            to: adminEmail,
+            messageId: info.messageId,
+            previewUrl: nodemailer.getTestMessageUrl(info)
+        });
+        
+        return {
+            success: true,
+            messageId: info.messageId,
+            previewUrl: nodemailer.getTestMessageUrl(info)
+        };
+        
+    } catch (error) {
+        logger.error("Failed to send admin notification email", {
+            error: error.message,
+            adminEmail: process.env.ADMIN_EMAIL
+        });
+        
+        return { success: false, error: error.message };
     }
 }
 
